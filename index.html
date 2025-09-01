@@ -12,7 +12,7 @@
             margin: 0;
             padding: 20px;
         }
-        h1, h2 {
+        h1 {
             color: #add8e6; /* Light blue */
         }
         h2.category-header {
@@ -74,6 +74,11 @@
             border-radius: 3px;
             border: 1px solid #add8e6;
         }
+        .confirmation {
+            color: green;
+            margin-top: 5px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -82,7 +87,7 @@
         
         <!-- Role Selection -->
         <div class="section">
-            <h2>Select Role</h2>
+            <h2 class="category-header">Select Role</h2>
             <select id="role-select">
                 <option value="">--Select--</option>
                 <option value="department">Department</option>
@@ -92,7 +97,7 @@
         
         <!-- Department View -->
         <div id="department-view" class="hidden">
-            <h2>Submit Indent</h2>
+            <h2 class="category-header">Submit Indent</h2>
             <div class="section">
                 <label for="department">Department:</label>
                 <select id="department">
@@ -125,17 +130,17 @@
         
         <!-- Pharmacy View -->
         <div id="pharmacy-view" class="hidden">
-            <h2>Pharmacy Dashboard</h2>
+            <h2 class="category-header">Pharmacy Dashboard</h2>
             <div id="indents-list"></div>
             
-            <h2>Generate Monthly Report</h2>
+            <h2 class="category-header">Generate Monthly Report</h2>
             <div class="section">
                 <label for="report-month">Month (YYYY-MM):</label>
                 <input type="month" id="report-month">
                 <button id="generate-monthly-report">Generate Monthly Report</button>
             </div>
             
-            <h2>Generate Daily Report</h2>
+            <h2 class="category-header">Generate Daily Report</h2>
             <div class="section">
                 <label for="report-date">Date (YYYY-MM-DD):</label>
                 <input type="date" id="report-date">
@@ -165,6 +170,7 @@
                 <h2 class="category-header">${cat}</h2>
                 <div id="${cat}-entries"></div>
                 <button onclick="addMedicineEntry('${cat}')">Add Medicine</button>
+                <p id="${cat}-confirmation" class="confirmation">Medicine added successfully</p>
             `;
             medicinesSections.appendChild(section);
         });
@@ -194,6 +200,13 @@
             entry.querySelector('.med-unit').addEventListener('change', (e) => {
                 entry.querySelector('.custom-unit').classList.toggle('hidden', e.target.value !== 'OTHER');
             });
+
+            // Show confirmation
+            const confirmation = document.getElementById(`${category}-confirmation`);
+            confirmation.style.display = 'block';
+            setTimeout(() => {
+                confirmation.style.display = 'none';
+            }, 2000);
         }
         
         // Role selection
@@ -210,31 +223,33 @@
         document.getElementById('submit-indent').addEventListener('click', () => {
             const dept = document.getElementById('department').value;
             if (!dept) {
-                alert('Select department');
+                alert('Please select a department');
                 return;
             }
             const indentDateInput = document.getElementById('indent-date').value;
             if (!indentDateInput) {
-                alert('Select indent date');
+                alert('Please select an indent date');
                 return;
             }
-            let valid = true;
             const medicines = [];
+            let valid = true;
             categories.forEach(cat => {
+                if (!valid) return;
                 const entries = document.querySelectorAll(`#${cat}-entries .medicine-entry`);
                 entries.forEach(entry => {
                     const name = entry.querySelector('.med-name').value.trim();
-                    const qty = parseFloat(entry.querySelector('.med-qty').value);
+                    const qtyInput = entry.querySelector('.med-qty').value;
+                    let qty = qtyInput ? parseFloat(qtyInput) : NaN;
                     let unit = entry.querySelector('.med-unit').value;
                     if (unit === 'OTHER') {
                         unit = entry.querySelector('.med-custom-unit').value.trim();
                         if (!unit) {
-                            alert('Enter custom unit for ' + name);
+                            alert(`Please enter a custom unit for ${name} in ${cat}`);
                             valid = false;
                             return;
                         }
                     }
-                    if (name && qty > 0 && unit) {
+                    if (name && !isNaN(qty) && qty > 0 && unit) {
                         medicines.push({ category: cat, name, qty, unit });
                     }
                 });
@@ -243,13 +258,13 @@
                 return;
             }
             if (medicines.length === 0) {
-                alert('Add at least one medicine');
+                alert('Please add at least one medicine');
                 return;
             }
             const indent = {
                 id: Date.now(),
                 dept,
-                date: indentDateInput, // Store as YYYY-MM-DD
+                date: indentDateInput,
                 medicines,
                 status: 'pending',
                 supplyDate: null
@@ -269,7 +284,10 @@
         document.getElementById('load-csv').addEventListener('click', () => {
             const fileInput = document.getElementById('csv-upload');
             const file = fileInput.files[0];
-            if (!file) return;
+            if (!file) {
+                alert('Please select a CSV file');
+                return;
+            }
             const reader = new FileReader();
             reader.onload = (e) => {
                 const lines = e.target.result.split('\n').slice(1); // Skip header if present
@@ -300,27 +318,40 @@
         function loadIndents() {
             const list = document.getElementById('indents-list');
             list.innerHTML = '<h3>Pending Indents</h3>';
+            const groupedByDate = {};
             indents.filter(i => i.status === 'pending').forEach(indent => {
+                const date = indent.date;
+                if (!groupedByDate[date]) {
+                    groupedByDate[date] = [];
+                }
+                groupedByDate[date].push(indent);
+            });
+            for (const date in groupedByDate) {
                 const div = document.createElement('div');
                 div.classList.add('section');
-                div.innerHTML = `
-                    <p><strong>Dept:</strong> ${indent.dept}</p>
-                    <p><strong>Date:</strong> ${new Date(indent.date).toLocaleString()}</p>
-                    <table>
-                        <tr><th>Category</th><th>Name</th><th>Qty</th><th>Unit</th></tr>
-                        ${indent.medicines.map(m => `<tr><td>${m.category}</td><td>${m.name}</td><td>${m.qty}</td><td>${m.unit}</td></tr>`).join('')}
-                    </table>
-                    <button onclick="supplyIndent(${indent.id})">Mark as Supplied</button>
-                `;
+                div.innerHTML = `<h3>Indents for ${date}</h3>`;
+                groupedByDate[date].forEach(indent => {
+                    const indentDiv = document.createElement('div');
+                    indentDiv.innerHTML = `
+                        <p><strong>Dept:</strong> ${indent.dept}</p>
+                        <p><strong>Date:</strong> ${new Date(indent.date).toLocaleString()}</p>
+                        <table>
+                            <tr><th>Category</th><th>Name</th><th>Qty</th><th>Unit</th></tr>
+                            ${indent.medicines.map(m => `<tr><td>${m.category}</td><td>${m.name}</td><td>${m.qty}</td><td>${m.unit}</td></tr>`).join('')}
+                        </table>
+                        <button onclick="supplyIndent(${indent.id})">Mark as Supplied</button>
+                    `;
+                    div.appendChild(indentDiv);
+                });
                 list.appendChild(div);
-            });
+            }
         }
         
         window.supplyIndent = function(id) {
             const indent = indents.find(i => i.id === id);
             if (indent) {
                 indent.status = 'supplied';
-                indent.supplyDate = new Date().toISOString();
+                indent.supplyDate = new Date().toISOString().split('T')[0];
                 localStorage.setItem('indents', JSON.stringify(indents));
                 loadIndents();
             }
