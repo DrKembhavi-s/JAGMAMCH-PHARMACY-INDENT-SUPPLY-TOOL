@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ayurveda Hospital Pharmacy Indent Management System</title>
+    <title>Jain AGM Ayurvedic Medical Hospital Pharmacy Indent & Supply Tool</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -14,9 +14,11 @@
         }
         h1 {
             color: #add8e6; /* Light blue */
+            font-weight: bold;
         }
-        h2.category-header {
+        h2.category-header, h3 {
             color: #001f3f; /* Dark blue */
+            font-weight: bold;
         }
         .container {
             max-width: 1200px;
@@ -63,6 +65,7 @@
         }
         th {
             background-color: #FFFFF0;
+            font-weight: bold;
         }
         .hidden {
             display: none;
@@ -83,7 +86,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Ayurveda Hospital Pharmacy Indent Management System</h1>
+        <h1>Jain AGM Ayurvedic Medical Hospital Pharmacy Indent & Supply Tool</h1>
         
         <!-- Role Selection -->
         <div class="section">
@@ -160,6 +163,7 @@
         const units = ['NUMBER', 'ML', 'GRAMS', 'KG', 'BOTTLES', 'JARS', 'OTHER'];
         
         let indents = JSON.parse(localStorage.getItem('indents')) || [];
+        let tempMedicines = []; // Temporary storage for medicines before submitting indent
         
         // Create medicine sections
         const medicinesSections = document.getElementById('medicines-sections');
@@ -192,6 +196,7 @@
                     <label>Custom Unit:</label>
                     <input type="text" class="med-custom-unit">
                 </div>
+                <button class="add-medicine" onclick="addMedicineToTemp('${category}', this)">Add to Indent</button>
                 <button onclick="this.parentElement.remove()">Remove</button>
             `;
             entries.appendChild(entry);
@@ -200,14 +205,45 @@
             entry.querySelector('.med-unit').addEventListener('change', (e) => {
                 entry.querySelector('.custom-unit').classList.toggle('hidden', e.target.value !== 'OTHER');
             });
-
-            // Show confirmation
+        }
+        
+        window.addMedicineToTemp = function(category, button) {
+            const entry = button.parentElement;
+            const name = entry.querySelector('.med-name').value.trim();
+            const qtyInput = entry.querySelector('.med-qty').value;
+            let qty = qtyInput ? parseFloat(qtyInput) : NaN;
+            let unit = entry.querySelector('.med-unit').value;
+            if (unit === 'OTHER') {
+                unit = entry.querySelector('.med-custom-unit').value.trim();
+                if (!unit) {
+                    alert(`Please enter a custom unit for ${name} in ${category}`);
+                    return;
+                }
+            }
+            if (!name) {
+                alert('Please enter a medicine name');
+                return;
+            }
+            if (isNaN(qty) || qty <= 0) {
+                alert('Please enter a valid quantity');
+                return;
+            }
+            if (!unit) {
+                alert('Please select a unit');
+                return;
+            }
+            tempMedicines.push({ category, name, qty, unit });
             const confirmation = document.getElementById(`${category}-confirmation`);
             confirmation.style.display = 'block';
             setTimeout(() => {
                 confirmation.style.display = 'none';
             }, 2000);
-        }
+            entry.querySelector('.med-name').value = '';
+            entry.querySelector('.med-qty').value = '';
+            entry.querySelector('.med-unit').value = units[0];
+            entry.querySelector('.custom-unit').classList.add('hidden');
+            entry.querySelector('.med-custom-unit').value = '';
+        };
         
         // Role selection
         document.getElementById('role-select').addEventListener('change', (e) => {
@@ -231,48 +267,23 @@
                 alert('Please select an indent date');
                 return;
             }
-            const medicines = [];
-            let valid = true;
-            categories.forEach(cat => {
-                if (!valid) return;
-                const entries = document.querySelectorAll(`#${cat}-entries .medicine-entry`);
-                entries.forEach(entry => {
-                    const name = entry.querySelector('.med-name').value.trim();
-                    const qtyInput = entry.querySelector('.med-qty').value;
-                    let qty = qtyInput ? parseFloat(qtyInput) : NaN;
-                    let unit = entry.querySelector('.med-unit').value;
-                    if (unit === 'OTHER') {
-                        unit = entry.querySelector('.med-custom-unit').value.trim();
-                        if (!unit) {
-                            alert(`Please enter a custom unit for ${name} in ${cat}`);
-                            valid = false;
-                            return;
-                        }
-                    }
-                    if (name && !isNaN(qty) && qty > 0 && unit) {
-                        medicines.push({ category: cat, name, qty, unit });
-                    }
-                });
-            });
-            if (!valid) {
-                return;
-            }
-            if (medicines.length === 0) {
-                alert('Please add at least one medicine');
+            if (tempMedicines.length === 0) {
+                alert('Please add at least one medicine to the indent');
                 return;
             }
             const indent = {
                 id: Date.now(),
                 dept,
                 date: indentDateInput,
-                medicines,
+                medicines: [...tempMedicines],
                 status: 'pending',
                 supplyDate: null
             };
             indents.push(indent);
             localStorage.setItem('indents', JSON.stringify(indents));
             alert('Indent submitted successfully');
-            // Clear form
+            // Clear form and temporary medicines
+            tempMedicines = [];
             categories.forEach(cat => {
                 document.getElementById(`${cat}-entries`).innerHTML = '';
             });
@@ -295,19 +306,16 @@
                     const [cat, name, qty, unitInput] = line.split(',').map(s => s.trim());
                     const catUpper = cat.toUpperCase();
                     if (categories.includes(catUpper) && name && qty) {
-                        addMedicineEntry(catUpper);
-                        const entries = document.querySelectorAll(`#${catUpper}-entries .medicine-entry`);
-                        const lastEntry = entries[entries.length - 1];
-                        lastEntry.querySelector('.med-name').value = name;
-                        lastEntry.querySelector('.med-qty').value = qty;
+                        const qtyNum = parseFloat(qty);
+                        if (isNaN(qtyNum) || qtyNum <= 0) return;
                         const unitUpper = unitInput.toUpperCase();
-                        if (units.includes(unitUpper)) {
-                            lastEntry.querySelector('.med-unit').value = unitUpper;
-                        } else {
-                            lastEntry.querySelector('.med-unit').value = 'OTHER';
-                            lastEntry.querySelector('.custom-unit').classList.remove('hidden');
-                            lastEntry.querySelector('.med-custom-unit').value = unitInput;
-                        }
+                        const unit = units.includes(unitUpper) ? unitUpper : unitInput;
+                        tempMedicines.push({ category: catUpper, name, qty: qtyNum, unit });
+                        const confirmation = document.getElementById(`${catUpper}-confirmation`);
+                        confirmation.style.display = 'block';
+                        setTimeout(() => {
+                            confirmation.style.display = 'none';
+                        }, 2000);
                     }
                 });
             };
