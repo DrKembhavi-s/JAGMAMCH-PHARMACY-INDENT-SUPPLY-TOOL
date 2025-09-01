@@ -15,6 +15,9 @@
         h1, h2 {
             color: #add8e6; /* Light blue */
         }
+        h2.category-header {
+            color: #001f3f; /* Dark blue */
+        }
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -159,7 +162,7 @@
             const section = document.createElement('div');
             section.classList.add('section');
             section.innerHTML = `
-                <h2>${cat}</h2>
+                <h2 class="category-header">${cat}</h2>
                 <div id="${cat}-entries"></div>
                 <button onclick="addMedicineEntry('${cat}')">Add Medicine</button>
             `;
@@ -215,7 +218,7 @@
                 alert('Select indent date');
                 return;
             }
-            const indentDate = new Date(indentDateInput).toISOString();
+            let valid = true;
             const medicines = [];
             categories.forEach(cat => {
                 const entries = document.querySelectorAll(`#${cat}-entries .medicine-entry`);
@@ -226,7 +229,8 @@
                     if (unit === 'OTHER') {
                         unit = entry.querySelector('.med-custom-unit').value.trim();
                         if (!unit) {
-                            alert('Enter custom unit');
+                            alert('Enter custom unit for ' + name);
+                            valid = false;
                             return;
                         }
                     }
@@ -235,6 +239,9 @@
                     }
                 });
             });
+            if (!valid) {
+                return;
+            }
             if (medicines.length === 0) {
                 alert('Add at least one medicine');
                 return;
@@ -242,14 +249,14 @@
             const indent = {
                 id: Date.now(),
                 dept,
-                date: indentDate,
+                date: indentDateInput, // Store as YYYY-MM-DD
                 medicines,
                 status: 'pending',
                 supplyDate: null
             };
             indents.push(indent);
             localStorage.setItem('indents', JSON.stringify(indents));
-            alert('Indent submitted');
+            alert('Indent submitted successfully');
             // Clear form
             categories.forEach(cat => {
                 document.getElementById(`${cat}-entries`).innerHTML = '';
@@ -359,14 +366,7 @@
         document.getElementById('generate-monthly-report').addEventListener('click', () => {
             const month = document.getElementById('report-month').value;
             if (!month) return;
-            const [year, mon] = month.split('-');
-            const start = new Date(year, mon - 1, 1);
-            const end = new Date(year, mon, 0, 23, 59, 59);
-            
-            const filtered = indents.filter(i => {
-                const d = new Date(i.date);
-                return d >= start && d <= end;
-            });
+            const filtered = indents.filter(i => i.date.startsWith(month));
             generateReport(filtered, 'Monthly Report');
         });
         
@@ -374,15 +374,7 @@
         document.getElementById('generate-daily-report').addEventListener('click', () => {
             const dateInput = document.getElementById('report-date').value;
             if (!dateInput) return;
-            const start = new Date(dateInput);
-            start.setHours(0, 0, 0, 0);
-            const end = new Date(dateInput);
-            end.setHours(23, 59, 59, 999);
-            
-            const filtered = indents.filter(i => {
-                const d = new Date(i.date);
-                return d >= start && d <= end;
-            });
+            const filtered = indents.filter(i => i.date === dateInput);
             generateReport(filtered, 'Daily Report');
         });
     </script>
