@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ayurveda Hospital Pharmacy Indent Management System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #001f3f; /* Dark blue */
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+        h1, h2 {
+            color: #add8e6; /* Light blue */
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section {
+            background-color: #003366; /* Darker blue */
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #add8e6;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #add8e6;
+            border-radius: 3px;
+            background-color: #001f3f;
+            color: #ffffff;
+        }
+        button {
+            background-color: #add8e6;
+            color: #001f3f;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #87ceeb;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #add8e6;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #003366;
+        }
+        .hidden {
+            display: none;
+        }
+        .medicine-entry {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #002b57;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ayurveda Hospital Pharmacy Indent Management System</h1>
+        
+        <!-- Role Selection -->
+        <div class="section">
+            <h2>Select Role</h2>
+            <select id="role-select">
+                <option value="">--Select--</option>
+                <option value="department">Department</option>
+                <option value="pharmacy">Pharmacy</option>
+            </select>
+        </div>
+        
+        <!-- Department View -->
+        <div id="department-view" class="hidden">
+            <h2>Submit Indent</h2>
+            <div class="section">
+                <label for="department">Department:</label>
+                <select id="department">
+                    <option value="">--Select--</option>
+                    <option value="KAYACHIKITSA">KAYACHIKITSA</option>
+                    <option value="PANCAKARMA">PANCAKARMA</option>
+                    <option value="SHALYA TANTRA">SHALYA TANTRA</option>
+                    <option value="SHALAKYA TANTRA">SHALAKYA TANTRA</option>
+                    <option value="KAUMARABHRITYA">KAUMARABHRITYA</option>
+                    <option value="PRASUTI TANTRA & STREE ROGA">PRASUTI TANTRA & STREE ROGA</option>
+                    <option value="AGADA TANTRA">AGADA TANTRA</option>
+                </select>
+            </div>
+            
+            <!-- Medicine Categories Sections -->
+            <div id="medicines-sections"></div>
+            
+            <div class="section">
+                <label for="csv-upload">Bulk Load CSV (Format: category,name,quantity,unit per row):</label>
+                <input type="file" id="csv-upload" accept=".csv">
+                <button id="load-csv">Load CSV</button>
+            </div>
+            
+            <button id="submit-indent">Submit Indent</button>
+        </div>
+        
+        <!-- Pharmacy View -->
+        <div id="pharmacy-view" class="hidden">
+            <h2>Pharmacy Dashboard</h2>
+            <div id="indents-list"></div>
+            
+            <h2>Generate Monthly Report</h2>
+            <div class="section">
+                <label for="report-month">Month (YYYY-MM):</label>
+                <input type="month" id="report-month">
+                <button id="generate-report">Generate Report</button>
+            </div>
+            <div id="report-output"></div>
+        </div>
+    </div>
+
+    <script>
+        const categories = [
+            'CHURNA', 'GUTI/VATI', 'KASHAYA', 'KWATHA CHURNA', 'ASAVA', 'ARISTA',
+            'GHRITA', 'TAILA', 'AVALEHA', 'LEPA', 'DROPS', 'OINTMENT', 'PROPRIETARY MEDS'
+        ];
+        
+        const units = ['NUMBER', 'ML', 'GRAMS'];
+        
+        let indents = JSON.parse(localStorage.getItem('indents')) || [];
+        
+        // Create medicine sections
+        const medicinesSections = document.getElementById('medicines-sections');
+        categories.forEach(cat => {
+            const section = document.createElement('div');
+            section.classList.add('section');
+            section.innerHTML = `
+                <h2>${cat}</h2>
+                <div id="${cat}-entries"></div>
+                <button onclick="addMedicineEntry('${cat}')">Add Medicine</button>
+            `;
+            medicinesSections.appendChild(section);
+        });
+        
+        function addMedicineEntry(category) {
+            const entries = document.getElementById(`${category}-entries`);
+            const entry = document.createElement('div');
+            entry.classList.add('medicine-entry');
+            entry.innerHTML = `
+                <label>Medicine Name:</label>
+                <input type="text" class="med-name">
+                <label>Quantity:</label>
+                <input type="number" class="med-qty" min="0">
+                <label>Unit:</label>
+                <select class="med-unit">
+                    ${units.map(u => `<option value="${u}">${u}</option>`).join('')}
+                </select>
+                <button onclick="this.parentElement.remove()">Remove</button>
+            `;
+            entries.appendChild(entry);
+        }
+        
+        // Role selection
+        document.getElementById('role-select').addEventListener('change', (e) => {
+            const role = e.target.value;
+            document.getElementById('department-view').classList.toggle('hidden', role !== 'department');
+            document.getElementById('pharmacy-view').classList.toggle('hidden', role !== 'pharmacy');
+            if (role === 'pharmacy') {
+                loadIndents();
+            }
+        });
+        
+        // Submit Indent
+        document.getElementById('submit-indent').addEventListener('click', () => {
+            const dept = document.getElementById('department').value;
+            if (!dept) {
+                alert('Select department');
+                return;
+            }
+            const medicines = [];
+            categories.forEach(cat => {
+                const entries = document.querySelectorAll(`#${cat}-entries .medicine-entry`);
+                entries.forEach(entry => {
+                    const name = entry.querySelector('.med-name').value.trim();
+                    const qty = parseFloat(entry.querySelector('.med-qty').value);
+                    const unit = entry.querySelector('.med-unit').value;
+                    if (name && qty > 0) {
+                        medicines.push({ category: cat, name, qty, unit });
+                    }
+                });
+            });
+            if (medicines.length === 0) {
+                alert('Add at least one medicine');
+                return;
+            }
+            const indent = {
+                id: Date.now(),
+                dept,
+                date: new Date().toISOString(),
+                medicines,
+                status: 'pending',
+                supplyDate: null
+            };
+            indents.push(indent);
+            localStorage.setItem('indents', JSON.stringify(indents));
+            alert('Indent submitted');
+            // Clear form
+            categories.forEach(cat => {
+                document.getElementById(`${cat}-entries`).innerHTML = '';
+            });
+            document.getElementById('department').value = '';
+        });
+        
+        // Load CSV
+        document.getElementById('load-csv').addEventListener('click', () => {
+            const fileInput = document.getElementById('csv-upload');
+            const file = fileInput.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const lines = e.target.result.split('\n').slice(1); // Skip header if present
+                lines.forEach(line => {
+                    const [cat, name, qty, unit] = line.split(',').map(s => s.trim());
+                    if (categories.includes(cat.toUpperCase()) && name && qty && units.includes(unit.toUpperCase())) {
+                        addMedicineEntry(cat.toUpperCase());
+                        const entries = document.querySelectorAll(`#${cat.toUpperCase()}-entries .medicine-entry`);
+                        const lastEntry = entries[entries.length - 1];
+                        lastEntry.querySelector('.med-name').value = name;
+                        lastEntry.querySelector('.med-qty').value = qty;
+                        lastEntry.querySelector('.med-unit').value = unit.toUpperCase();
+                    }
+                });
+            };
+            reader.readAsText(file);
+        });
+        
+        // Load Indents for Pharmacy
+        function loadIndents() {
+            const list = document.getElementById('indents-list');
+            list.innerHTML = '<h3>Pending Indents</h3>';
+            indents.filter(i => i.status === 'pending').forEach(indent => {
+                const div = document.createElement('div');
+                div.classList.add('section');
+                div.innerHTML = `
+                    <p><strong>Dept:</strong> ${indent.dept}</p>
+                    <p><strong>Date:</strong> ${new Date(indent.date).toLocaleString()}</p>
+                    <table>
+                        <tr><th>Category</th><th>Name</th><th>Qty</th><th>Unit</th></tr>
+                        ${indent.medicines.map(m => `<tr><td>${m.category}</td><td>${m.name}</td><td>${m.qty}</td><td>${m.unit}</td></tr>`).join('')}
+                    </table>
+                    <button onclick="supplyIndent(${indent.id})">Mark as Supplied</button>
+                `;
+                list.appendChild(div);
+            });
+        }
+        
+        window.supplyIndent = function(id) {
+            const indent = indents.find(i => i.id === id);
+            if (indent) {
+                indent.status = 'supplied';
+                indent.supplyDate = new Date().toISOString();
+                localStorage.setItem('indents', JSON.stringify(indents));
+                loadIndents();
+            }
+        }
+        
+        // Generate Report
+        document.getElementById('generate-report').addEventListener('click', () => {
+            const month = document.getElementById('report-month').value;
+            if (!month) return;
+            const [year, mon] = month.split('-');
+            const start = new Date(year, mon - 1, 1);
+            const end = new Date(year, mon, 0);
+            
+            const filtered = indents.filter(i => {
+                const d = new Date(i.date);
+                return d >= start && d <= end;
+            });
+            
+            const output = document.getElementById('report-output');
+            output.innerHTML = '<h3>Monthly Report</h3>';
+            if (filtered.length === 0) {
+                output.innerHTML += '<p>No indents this month.</p>';
+                return;
+            }
+            
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <tr>
+                    <th>ID</th>
+                    <th>Dept</th>
+                    <th>Indent Date</th>
+                    <th>Supply Date</th>
+                    <th>Status</th>
+                    <th>Medicines</th>
+                </tr>
+            `;
+            filtered.forEach(i => {
+                const medList = i.medicines.map(m => `${m.category}: ${m.name} ${m.qty} ${m.unit}`).join('<br>');
+                table.innerHTML += `
+                    <tr>
+                        <td>${i.id}</td>
+                        <td>${i.dept}</td>
+                        <td>${new Date(i.date).toLocaleDateString()}</td>
+                        <td>${i.supplyDate ? new Date(i.supplyDate).toLocaleDateString() : 'N/A'}</td>
+                        <td>${i.status}</td>
+                        <td>${medList}</td>
+                    </tr>
+                `;
+            });
+            output.appendChild(table);
+        });
+    </script>
+</body>
+</html>
