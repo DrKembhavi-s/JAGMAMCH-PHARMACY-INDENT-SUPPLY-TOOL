@@ -7,8 +7,8 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #001f3f; /* Dark blue */
-            color: #ffffff;
+            background-color: #FFFDD0; /* Cream */
+            color: #000000;
             margin: 0;
             padding: 20px;
         }
@@ -20,10 +20,11 @@
             margin: 0 auto;
         }
         .section {
-            background-color: #003366; /* Darker blue */
+            background-color: #FFFFF0; /* Lighter cream */
             padding: 15px;
             margin-bottom: 20px;
             border-radius: 5px;
+            border: 1px solid #add8e6;
         }
         label {
             display: block;
@@ -36,8 +37,8 @@
             margin-bottom: 10px;
             border: 1px solid #add8e6;
             border-radius: 3px;
-            background-color: #001f3f;
-            color: #ffffff;
+            background-color: #FFFFFF;
+            color: #000000;
         }
         button {
             background-color: #add8e6;
@@ -58,7 +59,7 @@
             text-align: left;
         }
         th {
-            background-color: #003366;
+            background-color: #FFFFF0;
         }
         .hidden {
             display: none;
@@ -66,8 +67,9 @@
         .medicine-entry {
             margin-bottom: 10px;
             padding: 10px;
-            background-color: #002b57;
+            background-color: #FFFFF0;
             border-radius: 3px;
+            border: 1px solid #add8e6;
         }
     </style>
 </head>
@@ -101,6 +103,10 @@
                     <option value="AGADA TANTRA">AGADA TANTRA</option>
                 </select>
             </div>
+            <div class="section">
+                <label for="indent-date">Indent Date:</label>
+                <input type="date" id="indent-date">
+            </div>
             
             <!-- Medicine Categories Sections -->
             <div id="medicines-sections"></div>
@@ -123,8 +129,16 @@
             <div class="section">
                 <label for="report-month">Month (YYYY-MM):</label>
                 <input type="month" id="report-month">
-                <button id="generate-report">Generate Report</button>
+                <button id="generate-monthly-report">Generate Monthly Report</button>
             </div>
+            
+            <h2>Generate Daily Report</h2>
+            <div class="section">
+                <label for="report-date">Date (YYYY-MM-DD):</label>
+                <input type="date" id="report-date">
+                <button id="generate-daily-report">Generate Daily Report</button>
+            </div>
+            
             <div id="report-output"></div>
         </div>
     </div>
@@ -135,7 +149,7 @@
             'GHRITA', 'TAILA', 'AVALEHA', 'LEPA', 'DROPS', 'OINTMENT', 'PROPRIETARY MEDS'
         ];
         
-        const units = ['NUMBER', 'ML', 'GRAMS'];
+        const units = ['NUMBER', 'ML', 'GRAMS', 'KG', 'BOTTLES', 'JARS', 'OTHER'];
         
         let indents = JSON.parse(localStorage.getItem('indents')) || [];
         
@@ -165,9 +179,18 @@
                 <select class="med-unit">
                     ${units.map(u => `<option value="${u}">${u}</option>`).join('')}
                 </select>
+                <div class="custom-unit hidden">
+                    <label>Custom Unit:</label>
+                    <input type="text" class="med-custom-unit">
+                </div>
                 <button onclick="this.parentElement.remove()">Remove</button>
             `;
             entries.appendChild(entry);
+            
+            // Add event listener for unit change
+            entry.querySelector('.med-unit').addEventListener('change', (e) => {
+                entry.querySelector('.custom-unit').classList.toggle('hidden', e.target.value !== 'OTHER');
+            });
         }
         
         // Role selection
@@ -187,14 +210,27 @@
                 alert('Select department');
                 return;
             }
+            const indentDateInput = document.getElementById('indent-date').value;
+            if (!indentDateInput) {
+                alert('Select indent date');
+                return;
+            }
+            const indentDate = new Date(indentDateInput).toISOString();
             const medicines = [];
             categories.forEach(cat => {
                 const entries = document.querySelectorAll(`#${cat}-entries .medicine-entry`);
                 entries.forEach(entry => {
                     const name = entry.querySelector('.med-name').value.trim();
                     const qty = parseFloat(entry.querySelector('.med-qty').value);
-                    const unit = entry.querySelector('.med-unit').value;
-                    if (name && qty > 0) {
+                    let unit = entry.querySelector('.med-unit').value;
+                    if (unit === 'OTHER') {
+                        unit = entry.querySelector('.med-custom-unit').value.trim();
+                        if (!unit) {
+                            alert('Enter custom unit');
+                            return;
+                        }
+                    }
+                    if (name && qty > 0 && unit) {
                         medicines.push({ category: cat, name, qty, unit });
                     }
                 });
@@ -206,7 +242,7 @@
             const indent = {
                 id: Date.now(),
                 dept,
-                date: new Date().toISOString(),
+                date: indentDate,
                 medicines,
                 status: 'pending',
                 supplyDate: null
@@ -219,6 +255,7 @@
                 document.getElementById(`${cat}-entries`).innerHTML = '';
             });
             document.getElementById('department').value = '';
+            document.getElementById('indent-date').value = '';
         });
         
         // Load CSV
@@ -230,14 +267,22 @@
             reader.onload = (e) => {
                 const lines = e.target.result.split('\n').slice(1); // Skip header if present
                 lines.forEach(line => {
-                    const [cat, name, qty, unit] = line.split(',').map(s => s.trim());
-                    if (categories.includes(cat.toUpperCase()) && name && qty && units.includes(unit.toUpperCase())) {
-                        addMedicineEntry(cat.toUpperCase());
-                        const entries = document.querySelectorAll(`#${cat.toUpperCase()}-entries .medicine-entry`);
+                    const [cat, name, qty, unitInput] = line.split(',').map(s => s.trim());
+                    const catUpper = cat.toUpperCase();
+                    if (categories.includes(catUpper) && name && qty) {
+                        addMedicineEntry(catUpper);
+                        const entries = document.querySelectorAll(`#${catUpper}-entries .medicine-entry`);
                         const lastEntry = entries[entries.length - 1];
                         lastEntry.querySelector('.med-name').value = name;
                         lastEntry.querySelector('.med-qty').value = qty;
-                        lastEntry.querySelector('.med-unit').value = unit.toUpperCase();
+                        const unitUpper = unitInput.toUpperCase();
+                        if (units.includes(unitUpper)) {
+                            lastEntry.querySelector('.med-unit').value = unitUpper;
+                        } else {
+                            lastEntry.querySelector('.med-unit').value = 'OTHER';
+                            lastEntry.querySelector('.custom-unit').classList.remove('hidden');
+                            lastEntry.querySelector('.med-custom-unit').value = unitInput;
+                        }
                     }
                 });
             };
@@ -274,23 +319,12 @@
             }
         }
         
-        // Generate Report
-        document.getElementById('generate-report').addEventListener('click', () => {
-            const month = document.getElementById('report-month').value;
-            if (!month) return;
-            const [year, mon] = month.split('-');
-            const start = new Date(year, mon - 1, 1);
-            const end = new Date(year, mon, 0);
-            
-            const filtered = indents.filter(i => {
-                const d = new Date(i.date);
-                return d >= start && d <= end;
-            });
-            
+        // Generate Report Function
+        function generateReport(filtered, title) {
             const output = document.getElementById('report-output');
-            output.innerHTML = '<h3>Monthly Report</h3>';
+            output.innerHTML = `<h3>${title}</h3>`;
             if (filtered.length === 0) {
-                output.innerHTML += '<p>No indents this month.</p>';
+                output.innerHTML += '<p>No indents found.</p>';
                 return;
             }
             
@@ -319,6 +353,37 @@
                 `;
             });
             output.appendChild(table);
+        }
+        
+        // Generate Monthly Report
+        document.getElementById('generate-monthly-report').addEventListener('click', () => {
+            const month = document.getElementById('report-month').value;
+            if (!month) return;
+            const [year, mon] = month.split('-');
+            const start = new Date(year, mon - 1, 1);
+            const end = new Date(year, mon, 0, 23, 59, 59);
+            
+            const filtered = indents.filter(i => {
+                const d = new Date(i.date);
+                return d >= start && d <= end;
+            });
+            generateReport(filtered, 'Monthly Report');
+        });
+        
+        // Generate Daily Report
+        document.getElementById('generate-daily-report').addEventListener('click', () => {
+            const dateInput = document.getElementById('report-date').value;
+            if (!dateInput) return;
+            const start = new Date(dateInput);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(dateInput);
+            end.setHours(23, 59, 59, 999);
+            
+            const filtered = indents.filter(i => {
+                const d = new Date(i.date);
+                return d >= start && d <= end;
+            });
+            generateReport(filtered, 'Daily Report');
         });
     </script>
 </body>
